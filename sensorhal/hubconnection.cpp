@@ -815,6 +815,7 @@ void HubConnection::processSample(uint64_t timestamp, uint32_t type, uint32_t se
                 && isSampleIntervalSatisfied(COMMS_SENSOR_MAG_UNCALIBRATED, timestamp)) {
             ++cnt;
         }
+        break;
     default:
         break;
     }
@@ -1667,9 +1668,18 @@ void HubConnection::initConfigCmd(struct ConfigCmd *cmd, int handle)
 
     cmd->evtType = EVT_NO_SENSOR_CONFIG_EVENT;
     cmd->sensorType = mSensorState[handle].sensorType;
-    cmd->cmd = mSensorState[handle].enable ? CONFIG_CMD_ENABLE : CONFIG_CMD_DISABLE;
-    cmd->rate = mSensorState[handle].rate;
-    cmd->latency = mSensorState[handle].latency;
+
+    if (mSensorState[handle].enable) {
+        cmd->cmd = CONFIG_CMD_ENABLE;
+        cmd->rate = mSensorState[handle].rate;
+        cmd->latency = mSensorState[handle].latency;
+    } else {
+        cmd->cmd = CONFIG_CMD_DISABLE;
+        // set rate and latency to values that will always be overwritten by the
+        // first enabled alt sensor
+        cmd->rate = UINT32_C(0);
+        cmd->latency = UINT64_MAX;
+    }
 
     for (int i=0; i<MAX_ALTERNATES; ++i) {
         uint8_t alt = mSensorState[handle].alt[i];
@@ -2308,15 +2318,14 @@ uint64_t HubConnection::rateLevelToDeviceSamplingPeriodNs(int handle, int rateLe
 
     switch (rateLevel) {
         case SENSOR_DIRECT_RATE_VERY_FAST:
-            // No sensor support VERY_FAST, fall through
+            [[fallthrough]]; // No sensor support VERY_FAST, fall through
         case SENSOR_DIRECT_RATE_FAST:
             if (handle != COMMS_SENSOR_MAG && handle != COMMS_SENSOR_MAG_UNCALIBRATED) {
                 return 2500*1000; // 400Hz
             }
-            // fall through
+            [[fallthrough]];
         case SENSOR_DIRECT_RATE_NORMAL:
             return 20*1000*1000; // 50 Hz
-            // fall through
         default:
             return INT64_MAX;
     }
